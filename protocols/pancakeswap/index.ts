@@ -1,17 +1,21 @@
 import { Chain } from "@defillama/sdk/build/general";
-import { BaseAdapter, BreakdownAdapter, DISABLED_ADAPTER_KEY, IJSON } from "../../adapters/types";
+import { BaseAdapter, BreakdownAdapter, DISABLED_ADAPTER_KEY, FetchResultVolume, IJSON } from "../../adapters/types";
 import { CHAIN } from "../../helpers/chains";
 import disabledAdapter from "../../helpers/disabledAdapter";
 
 import { getGraphDimensions } from "../../helpers/getUniSubgraph"
+import axios from "axios";
+import * as sdk from "@defillama/sdk";
 
 const endpoints = {
   [CHAIN.BSC]: "https://proxy-worker.pancake-swap.workers.dev/bsc-exchange",
   [CHAIN.ETHEREUM]: "https://api.thegraph.com/subgraphs/name/pancakeswap/exhange-eth",
   [CHAIN.POLYGON_ZKEVM]: "https://api.studio.thegraph.com/query/45376/exchange-v2-polygon-zkevm/version/latest",
   [CHAIN.ERA]: "https://api.studio.thegraph.com/query/45376/exchange-v2-zksync/version/latest",
-  [CHAIN.ARBITRUM]: "https://api.studio.thegraph.com/query/45376/exchange-v2-arbitrum/version/latest",
-  [CHAIN.LINEA]: "https://graph-query.linea.build/subgraphs/name/pancakeswap/exhange-v2"
+  [CHAIN.ARBITRUM]: "https://api.thegraph.com/subgraphs/name/pancakeswap/exchange-v2-arb",
+  [CHAIN.LINEA]: "https://graph-query.linea.build/subgraphs/name/pancakeswap/exhange-v2",
+  [CHAIN.BASE]: "https://api.studio.thegraph.com/query/45376/exchange-v2-base/version/latest",
+  [CHAIN.OP_BNB]: `${process.env.PANCAKESWAP_OPBNB_SUBGRAPH}/subgraphs/name/pancakeswap/exchange-v2`
 };
 
 const stablesSwapEndpoints = {
@@ -23,8 +27,10 @@ const v3Endpoint = {
   [CHAIN.ETHEREUM]: "https://api.thegraph.com/subgraphs/name/pancakeswap/exchange-v3-eth",
   [CHAIN.POLYGON_ZKEVM]: "https://api.studio.thegraph.com/query/45376/exchange-v3-polygon-zkevm/version/latest",
   [CHAIN.ERA]: "https://api.studio.thegraph.com/query/45376/exchange-v3-zksync/version/latest",
-  [CHAIN.ARBITRUM]: "https://api.studio.thegraph.com/query/45376/exchange-v3-arbitrum/version/latest",
-  [CHAIN.LINEA]: "https://graph-query.linea.build/subgraphs/name/pancakeswap/exchange-v3-linea"
+  [CHAIN.ARBITRUM]: "https://api.thegraph.com/subgraphs/name/pancakeswap/exchange-v3-arb",
+  [CHAIN.LINEA]: "https://graph-query.linea.build/subgraphs/name/pancakeswap/exchange-v3-linea",
+  [CHAIN.BASE]: "https://api.studio.thegraph.com/query/45376/exchange-v3-base/version/latest",
+  [CHAIN.OP_BNB]: `${process.env.PANCAKESWAP_OPBNB_SUBGRAPH}/subgraphs/name/pancakeswap/exchange-v3`
 }
 
 const VOLUME_USD = "volumeUSD";
@@ -82,7 +88,7 @@ const v3Graph = getGraphDimensions({
     factory: "pancakeDayData",
     field: VOLUME_USD
   },
-  totalFees:{
+  totalFees: {
     factory: "factories",
   },
   dailyFees: {
@@ -97,7 +103,9 @@ const startTimes = {
   [CHAIN.POLYGON_ZKEVM]: 1687910400,
   [CHAIN.ERA]: 1690156800,
   [CHAIN.ARBITRUM]: 1691452800,
-  [CHAIN.LINEA]: 1692835200
+  [CHAIN.LINEA]: 1692835200,
+  [CHAIN.BASE]: 1693440000,
+  [CHAIN.OP_BNB]: 1695081600
 } as IJSON<number>
 
 const stableTimes = {
@@ -110,7 +118,9 @@ const v3StartTimes = {
   [CHAIN.POLYGON_ZKEVM]: 1686182400,
   [CHAIN.ERA]: 1690156800,
   [CHAIN.ARBITRUM]: 1691452800,
-  [CHAIN.LINEA]: 1692835200
+  [CHAIN.LINEA]: 1692835200,
+  [CHAIN.BASE]: 1692576000,
+  [CHAIN.OP_BNB]: 1693440000
 } as IJSON<number>
 
 const methodology = {
@@ -122,11 +132,133 @@ const methodology = {
   Fees: "All fees comes from the user."
 }
 
+interface ISwapEventData {
+  type: string;
+  amount_x_in: string;
+  amount_x_out: string;
+  amount_y_in: string;
+  amount_y_out: string;
+  user: string;
+}
+
+const account = '0xc7efb4076dbe143cbcd98cfaaa929ecfc8f299203dfff63b95ccb6bfe19850fa';
+const getToken = (i: string) => i.split('<')[1].replace('>', '').split(', ');
+const APTOS_PRC = 'https://aptos-mainnet.pontem.network';
+
+const getResources = async (account: string): Promise<any[]> => {
+  const data: any = []
+  let lastData: any;
+  let cursor
+  do {
+    let url = `${APTOS_PRC}/v1/accounts/${account}/resources?limit=9999`
+    if (cursor) url += '&start=' + cursor
+    const res = await axios.get(url)
+    lastData = res.data
+    data.push(...lastData)
+    cursor = res.headers['x-aptos-cursor']
+  } while (lastData.length === 9999)
+  return data
+}
+
+const fetchVolume = async (timestamp: number) => {
+  const fromTimestamp = timestamp - 86400;
+  const toTimestamp = timestamp;
+  const account_resource: any[] = (await getResources(account))
+  const pools = account_resource.filter(e => e.type?.includes('swap::PairEventHolder'))
+    .map((e: any) => {
+      const [token0, token1] = getToken(e.type);
+      return {
+        type: e.type,
+        token0,
+        token1,
+        swap_events: {
+          counter: e.data.swap.counter,
+          creation_num: e.data.swap.guid.id.creation_num,
+        },
+        timestamp: e.data.timestamp,
+        counter: Number(e.data.swap.counter),
+      }
+    }).sort((a, b) => b.counter - a.counter)
+  const creation_num = [14, 767, 702, 12, 622, 757, 1077, 1092, 5708, 2, 712, 3196]
+  const logs_swap: ISwapEventData[] = (await Promise.all(pools
+    .filter(e => creation_num.includes(Number(e.swap_events.creation_num)))
+    .map(p => getSwapEvent(p, fromTimestamp, toTimestamp)))).flat()
+  const numberOfTrade: any = {};
+  // debugger
+  [...new Set(logs_swap.map(e => e.user))].forEach(e => {
+    numberOfTrade[e] = {};
+    numberOfTrade[e]['user'] = e;
+    numberOfTrade[e]['count'] = 0;
+    numberOfTrade[e]['volume'] = 0;
+  })
+  const balances = new sdk.Balances({ chain: CHAIN.APTOS, timestamp })
+  logs_swap.map((e: ISwapEventData) => {
+    const [token0, token1] = getToken(e.type);
+    balances.add(token0, e.amount_x_out)
+    balances.add(token1, e.amount_y_out)
+  })
+
+  return {
+    timestamp,
+    dailyVolume: await balances.getUSDString(),
+    dailyFees: "0",
+  }
+}
+
+const getSwapEvent = async (pool: any, fromTimestamp: number, toTimestamp: number): Promise<ISwapEventData[]> => {
+  const limit = 100;
+  const swap_events: any[] = [];
+  let start = (pool.swap_events.counter - limit) < 0 ? 0 : pool.swap_events.counter - limit;
+  while (true) {
+    if (start < 0) break;
+    const getEventByCreation = `${APTOS_PRC}/v1/accounts/${account}/events/${pool.swap_events.creation_num}?start=${start}&limit=${limit}`;
+    try {
+      const event: any[] = (await axios.get(getEventByCreation)).data;
+      const listSequence: number[] = event.map(e => Number(e.sequence_number))
+      const lastMin = Math.min(...listSequence)
+      if (lastMin >= Infinity || lastMin <= -Infinity) break;
+      const lastVision = event.find(e => Number(e.sequence_number) === lastMin)?.version;
+      const urlBlock = `${APTOS_PRC}/v1/blocks/by_version/${lastVision}`;
+      const block = (await axios.get(urlBlock)).data;
+      const lastTimestamp = toUnixTime(block.block_timestamp);
+      const lastTimestampNumber = lastTimestamp
+      if (lastTimestampNumber >= fromTimestamp && lastTimestampNumber <= toTimestamp) {
+        swap_events.push(...event)
+      }
+      if (lastTimestampNumber < fromTimestamp) {
+        break;
+      }
+      if (start === 0) break;
+      start = lastMin - (limit + 1) > 0 ? lastMin - (limit + 1) : 0;
+    } catch (e: any) {
+      break;
+      // start = start - 26 > 0 ? start - 26 : 0;
+    }
+  }
+  return swap_events.map(e => {
+    return {
+      ...e,
+      type: e.type,
+      ...e.data
+    }
+  })
+}
+const toUnixTime = (timestamp: string) => Number((Number(timestamp) / 1e6).toString().split('.')[0])
+
 const adapter: BreakdownAdapter = {
   breakdown: {
     v1: {
       [DISABLED_ADAPTER_KEY]: disabledAdapter,
-      [CHAIN.BSC]: disabledAdapter
+      [CHAIN.BSC]: {
+        fetch: async (timestamp: number) => {
+          const totalVolume = 103394400000;
+          return {
+            totalVolume: `${totalVolume}`,
+            timestamp: timestamp
+          }
+        },
+        start: async () => 1680307200,
+      }
     },
     v2: Object.keys(endpoints).reduce((acc, chain) => {
       acc[chain] = {
@@ -140,7 +272,15 @@ const adapter: BreakdownAdapter = {
     }, {} as BaseAdapter),
     v3: Object.keys(v3Endpoint).reduce((acc, chain) => {
       acc[chain] = {
-        fetch: v3Graph(chain as Chain),
+        fetch: async (timestamp: number) => {
+          const v3stats = await v3Graph(chain)(timestamp, {})
+          if (chain === CHAIN.ETHEREUM) v3stats.totalVolume = (Number(v3stats.totalVolume) - 7385565913).toString()
+          return {
+            ...v3stats,
+            timestamp
+          }
+
+        },
         start: async () => v3StartTimes[chain],
       }
       return acc
@@ -150,7 +290,7 @@ const adapter: BreakdownAdapter = {
         fetch: graphsStableSwap(chain as Chain),
         start: async () => stableTimes[chain],
         meta: {
-          methodology : {
+          methodology: {
             UserFees: "User pays 0.25% fees on each swap.",
             ProtocolRevenue: "Treasury receives 10% of the fees.",
             SupplySideRevenue: "LPs receive 50% of the fees.",
@@ -164,5 +304,10 @@ const adapter: BreakdownAdapter = {
     }, {} as BaseAdapter),
   },
 };
+adapter.breakdown.v2[CHAIN.APTOS] = {
+  fetch: fetchVolume,
+  start: async () => 1699488000,
+  // runAtCurrTime: true,
+}
 
 export default adapter;

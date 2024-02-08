@@ -4,24 +4,24 @@ import { CHAIN } from "../../helpers/chains";
 import { getUniqStartOfTodayTimestamp } from "../../helpers/getUniSubgraphVolume";
 
 const START_TIME = 1659312000;
-const historicalVolumeEndpoint = (until: number) => `https://api-insights.carbon.network/market/volume?from=${START_TIME}&interval=day&until=${until}`
+const historicalVolumeEndpoint = () => `https://api.carbon.network/carbon/marketstats/v1/stats`
 
 interface IVolumeall {
-  volumeValue: string;
-  totalVolumeValue: string;
+  market_type: string;
+  day_quote_volume: string;
   date: string;
 }
 
 const fetch = async (timestamp: number) => {
   const dayTimestamp = getUniqStartOfTodayTimestamp(new Date(timestamp * 1000))
-  const historicalVolume: IVolumeall[] = (await fetchURL(historicalVolumeEndpoint(dayTimestamp)))?.data.result.entries;
+  const historicalVolume: IVolumeall[] = (await fetchURL(historicalVolumeEndpoint()))?.data.marketstats;
 
   const volume = historicalVolume
-    .find(dayItem => (new Date(dayItem.date.split('T')[0]).getTime() / 1000) === dayTimestamp)
+    .filter((e: IVolumeall) => e.market_type === "spot")
+    .reduce((a: number, b: IVolumeall) => a + Number(b.day_quote_volume), 0) / 1e18;
 
   return {
-    totalVolume: `${volume?.totalVolumeValue}`,
-    dailyVolume: volume ? `${volume.volumeValue}` : undefined,
+    dailyVolume: volume ? `${volume}` : undefined,
     timestamp: dayTimestamp,
   };
 };

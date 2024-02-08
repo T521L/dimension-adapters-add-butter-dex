@@ -3,7 +3,14 @@ import type { BaseAdapter, SimpleAdapter } from "../../adapters/types";
 import { CHAIN } from "../../helpers/chains";
 import { getUniqStartOfTodayTimestamp } from "../../helpers/getUniSubgraphVolume";
 
-const chains = [CHAIN.ETHEREUM, CHAIN.BSC];
+const chains = [
+  CHAIN.ETHEREUM,
+  CHAIN.BSC,
+  CHAIN.POLYGON,
+  CHAIN.ARBITRUM,
+  CHAIN.AVAX,
+  CHAIN.MANTLE,
+];
 
 const NATIVE_ANALYTICS_ENDPOINT =
   "http://chain-monitoring.native.org/analytics/overview";
@@ -15,9 +22,10 @@ interface ResEntry {
   tvlUSD: number;
 }
 
+
 const getStartTime = async (chain: string) => {
   const response = await axios.get(
-    `${NATIVE_ANALYTICS_ENDPOINT}?chain=${chain}`
+    `${NATIVE_ANALYTICS_ENDPOINT}?chain=${chain === CHAIN.AVAX ? "avalanche" : chain}`
   );
 
   const smallestDate = response.data.reduce(
@@ -41,7 +49,7 @@ const adapter: SimpleAdapter = {
           );
 
           const response = await axios.get(
-            `${NATIVE_ANALYTICS_ENDPOINT}?chain=${chain}`
+            `${NATIVE_ANALYTICS_ENDPOINT}?chain=${chain === CHAIN.AVAX ? "avalanche" : chain}`
           );
 
           const totalVol = response.data.reduce(

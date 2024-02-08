@@ -67,6 +67,9 @@ export type Adapter = SimpleAdapter | BreakdownAdapter;
 export type FetchResultVolume = FetchResultBase & {
   dailyVolume?: string // | IJSON<string>;
   totalVolume?: string // | IJSON<string>;
+  dailyShortOpenInterest?: string // | IJSON<string>;
+  dailyLongOpenInterest?: string;
+  dailyOpenInterest?: string;
 };
 
 // FEES
@@ -83,11 +86,12 @@ export type FetchResultFees = FetchResultBase & {
   totalSupplySideRevenue?: string | IJSON<string>;
   totalUserFees?: string | IJSON<string>;
   dailyBribesRevenue?: string | IJSON<string>;
+  dailyTokenTaxes?: string | IJSON<string>;
 };
 
 // INCENTIVES
 export type FetchResultIncentives = FetchResultBase & {
-  tokens?: IJSON<string> // | string
+  tokenIncentives?: string // | IJSON<string>;
 };
 
 // AGGREGATORS
@@ -102,6 +106,9 @@ export type FetchResultOptions = FetchResultBase & {
   totalNotionalVolume?: string // | IJSON<string>
   dailyPremiumVolume?: string // | IJSON<string>
   dailyNotionalVolume?: string // | IJSON<string>
+  dailyShortOpenInterest?: string // | IJSON<string>;
+  dailyLongOpenInterest?: string;
+  dailyOpenInterest?: string;
 };
 
 
@@ -113,7 +120,8 @@ export enum AdapterType {
   DERIVATIVES = 'derivatives',
   OPTIONS = 'options',
   PROTOCOLS = 'protocols',
-  ROYALTIES = 'royalties'
+  ROYALTIES = 'royalties',
+  AGGREGATOR_DERIVATIVES = 'aggregator-derivatives'
 }
 
 export type FetchResult = FetchResultVolume & FetchResultFees & FetchResultAggregators & FetchResultOptions & FetchResultIncentives

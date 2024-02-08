@@ -26,73 +26,24 @@ const topic0 = '0xb3e2773606abfd36b5bd91394b3a54d1398336c65005baf7bf7a05efeffaf7
 const FACTORY_ADDRESS = '0xF1046053aa5682b4F9a81b5481394DA16BE5FF5a';
 
 type TABI = {
-  [k: string]: object;
+  [k: string]: string;
 }
 const ABIs: TABI = {
-  allPoolsLength: {
-    "inputs": [],
-    "name": "allPoolsLength",
-    "outputs": [
-        {
-            "internalType": "uint256",
-            "name": "",
-            "type": "uint256"
-        }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  allPools: {
-    "inputs": [
-        {
-            "internalType": "uint256",
-            "name": "",
-            "type": "uint256"
-        }
-    ],
-    "name": "allPools",
-    "outputs": [
-        {
-            "internalType": "address",
-            "name": "",
-            "type": "address"
-        }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  }
-};
-
-const PAIR_TOKEN_ABI = (token: string): object => {
-  return {
-    "constant": true,
-    "inputs": [],
-    "name": token,
-    "outputs": [
-      {
-        "internalType": "address",
-        "name": "",
-        "type": "address"
-      }
-    ],
-    "payable": false,
-    "stateMutability": "view",
-    "type": "function"
-  }
-};
-
+  "allPoolsLength": "uint256:allPoolsLength",
+  "allPools": "function allPools(uint256) view returns (address)"
+}
 
 export const fetchV2 = async (timestamp: number) => {
   const fromTimestamp = timestamp - 60 * 60 * 24
   const toTimestamp = timestamp
   try {
-    const poolLength = (await sdk.api.abi.call({
+    const poolLength = (await sdk.api2.abi.call({
       target: FACTORY_ADDRESS,
       chain: CHAIN.OPTIMISM,
       abi: ABIs.allPoolsLength,
-    })).output;
+    }));
 
-    const poolsRes = await sdk.api.abi.multiCall({
+    const poolsRes = await sdk.api2.abi.multiCall({
       abi: ABIs.allPools,
       calls: Array.from(Array(Number(poolLength)).keys()).map((i) => ({
         target: FACTORY_ADDRESS,
@@ -101,37 +52,31 @@ export const fetchV2 = async (timestamp: number) => {
       chain: CHAIN.OPTIMISM
     });
 
-    const lpTokens = poolsRes.output
-      .map(({ output }: any) => output);
+    const lpTokens = poolsRes
 
     const [underlyingToken0, underlyingToken1] = await Promise.all(
-      ['token0', 'token1'].map((method) =>
-        sdk.api.abi.multiCall({
-          abi: PAIR_TOKEN_ABI(method),
-          calls: lpTokens.map((address: string) => ({
-            target: address,
-          })),
+      ['address:token0', 'address:token1'].map((method) =>
+        sdk.api2.abi.multiCall({
+          abi: method,
+          calls: lpTokens,
           chain: CHAIN.OPTIMISM,
           permitFailure: true,
         })
       )
     );
 
-    const tokens0 = underlyingToken0.output.map((res: any) => res.output);
-    const tokens1 = underlyingToken1.output.map((res: any) => res.output);
+    const tokens0 = underlyingToken0;
+    const tokens1 = underlyingToken1;
     const fromBlock = (await getBlock(fromTimestamp, CHAIN.OPTIMISM, {}));
     const toBlock = (await getBlock(toTimestamp, CHAIN.OPTIMISM, {}));
-    const logs: ILog[][] = (await Promise.all(lpTokens.map((address: string) => sdk.api.util.getLogs({
+    const logs: ILog[][] = (await Promise.all(lpTokens.map((address: string) => sdk.getEventLogs({
       target: address,
       topic: topic_name,
       toBlock: toBlock,
       fromBlock: fromBlock,
-      keys: [],
       chain: CHAIN.OPTIMISM,
       topics: [topic0]
-    }))))
-      .map((p: any) => p)
-      .map((a: any) => a.output);
+    })))) as any;
     const rawCoins = [...tokens0, ...tokens1].map((e: string) => `${CHAIN.OPTIMISM}:${e}`);
     const coins: string[] = [...new Set(rawCoins)]
     const coins_split: string[][] = [];

@@ -15,16 +15,9 @@ async function getBlock(timestamp: number, chain: Chain, chainBlocks: ChainBlock
             block = Number((await retry(async () => (await axios.get("https://explorer.celo.org/api?module=block&action=getblocknobytime&timestamp=" + timestamp + "&closest=before").catch((e) => {
                 throw new Error(`Error getting block: ${chain} ${timestamp} ${e.message}`)
             }))?.data?.result?.blockNumber)));
-        else if (chain === CHAIN.MOONRIVER)
-            block = Number((await retry(async () => (await axios.get(`https://blockscout.moonriver.moonbeam.network/api?module=block&action=getblocknobytime&timestamp=${timestamp}&closest=before`).catch((e) => {
-                throw new Error(`Error getting block: ${chain} ${timestamp} ${e.message}`)
-            }))?.data?.result?.blockNumber)));
         else if (chain === CHAIN.KAVA)
             block = Number((await retry(async () => (await axios.get(`https://explorer.kava.io/api?module=block&action=getblocknobytime&timestamp=${timestamp}&closest=before`).catch((e) => {
-                throw new Error(`Error getting block: ${chain} ${timestamp} ${e.message}`)
-            }))?.data?.result?.blockNumber)));
-        else if (chain === CHAIN.PULSECHAIN)
-            block = Number((await retry(async () => (await axios.get(`https://scan.pulsechain.com/api?module=block&action=getblocknobytime&timestamp=${timestamp}&closest=before`).catch((e) => {
+                console.log(`Error getting block: ${chain} ${timestamp} ${e.message}`)
                 throw new Error(`Error getting block: ${chain} ${timestamp} ${e.message}`)
             }))?.data?.result?.blockNumber)));
         else if (chain === CHAIN.ONUS)
@@ -32,29 +25,24 @@ async function getBlock(timestamp: number, chain: Chain, chainBlocks: ChainBlock
                 throw new Error(`Error getting block: ${chain} ${timestamp} ${e.message}`)
             }))?.data?.result?.blockNumber)));
         else if (chain as CHAIN === CHAIN.POLYGON_ZKEVM || chain === CHAIN.VISION || chain as CHAIN === CHAIN.ERA)
-            return sdk.api.util.lookupBlock(timestamp, { chain }).then(blockData => blockData.block) // TODO after get block support chain  polygon_zkevm then swith to use api https://coins.llama.fi/block
+            return sdk.api.util.lookupBlock(timestamp, { chain }).then((blockData: any) => blockData.block) // TODO after get block support chain  polygon_zkevm then swith to use api https://coins.llama.fi/block
         else if (chain as CHAIN === CHAIN.WAVES)
             block = Number((await retry(async () => (await axios.get(`https://nodes.wavesnodes.com/blocks/heightByTimestamp/${timestamp}`).catch((e) => {
                 throw new Error(`Error getting block: ${chain} ${timestamp} ${e.message}`)
             }))?.data?.height)));
-        else if (chain === CHAIN.LINEA)
-            block = Number((await retry(async () => (await axios.get("https://explorer.linea.build/api?module=block&action=getblocknobytime&timestamp=" + timestamp + "&closest=before").catch((e) => {
-                throw new Error(`Error getting block: ${chain} ${timestamp} ${e.message}`)
-            }))?.data?.result?.blockNumber)));
         else if (chain === CHAIN.BASE)
             block = Number((await retry(async () => (await axios.get(`https://base.blockscout.com/api?module=block&action=getblocknobytime&timestamp=${timestamp}&closest=before`).catch((e) => {
                 throw new Error(`Error getting block: ${chain} ${timestamp} ${e.message}`)
             }))?.data?.result?.blockNumber)));
-        else if (chain === CHAIN.OP_BNB)
-            block = Number((await retry(async () => (await await sdk.api.util.lookupBlock(timestamp, { chain }).catch((e) => {
-                console.log(`Error getting block: ${chain} ${timestamp} ${e.message}`)
+        else if (chain === CHAIN.SCROLL)
+            block = Number((await retry(async () => (await axios.get(`https://blockscout.scroll.io/api?module=block&action=getblocknobytime&timestamp=${timestamp}&closest=before`).catch((e) => {
                 throw new Error(`Error getting block: ${chain} ${timestamp} ${e.message}`)
-            }))?.block)));
+            }))?.data?.result?.blockNumber)));
         else
             block = Number((await retry(async () => (await axios.get(`https://coins.llama.fi/block/${chain}/${timestamp}`).catch((e) => {
                 console.log(`Error getting block: ${chain} ${timestamp} ${e.message}`)
                 throw new Error(`Error getting block: ${chain} ${timestamp} ${e.message}`)
-            }))?.data?.height)));
+            }))?.data?.height, { retries: 3 })));
         if (block) chainBlocks[chain] = block
         return block
         // https://base.blockscout.com
